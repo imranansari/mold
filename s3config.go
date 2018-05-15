@@ -2,6 +2,13 @@ package main
 
 import (
 	"fmt"
+	"os"
+)
+
+const (
+	awsAccessKey     = "AWS_ACCESS_KEY_ID"
+	awsSecretKey     = "AWS_SECRET_ACCESS_KEY"
+	awsDefaultRegion = "AWS_DEFAULT_REGION"
 )
 
 type S3Config struct {
@@ -26,4 +33,18 @@ func (sc *S3Config) Validate() error {
 	}
 
 	return nil
+}
+
+func (sc *S3Config) LoadCredentialsFromEnv() {
+	if sc.AccessKey == "" {
+		sc.AccessKey = os.Getenv(awsAccessKey)
+	}
+
+	if sc.SecretKey == "" {
+		sc.SecretKey = os.Getenv(awsSecretKey)
+	}
+
+	if sc.Region == "" {
+		sc.Region = os.Getenv(awsDefaultRegion)
+	}
 }
