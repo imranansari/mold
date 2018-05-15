@@ -5,6 +5,8 @@ type Artifacts struct {
 	Registry string `yaml:",omitempty"` // default registry value
 	Images   []ImageConfig
 	Publish  []string // branch/tag's to publish images on
+
+	S3 []S3Config
 }
 
 // ValidateImageConfigs validates all image configs
@@ -14,6 +16,13 @@ func (art *Artifacts) ValidateImageConfigs() error {
 			return err
 		}
 	}
+
+	for _, v := range art.S3 {
+		if err := v.Validate(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
