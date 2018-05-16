@@ -57,6 +57,7 @@ func (art *Artifacts) setDefaults() {
 
 }
 
+// loadEnv loads env variables for s3 artifacts
 func (art *Artifacts) loadEnv() {
 	for _, s3c := range art.S3 {
 		s3c.LoadCredentialsFromEnv()

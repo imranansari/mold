@@ -11,9 +11,11 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
+// S3Publisher provides method for publishing to s3
 type S3Publisher struct{}
 
-func (_ *S3Publisher) Publish(cfg S3Config) error {
+// Publish publish provided artifact to s3
+func (*S3Publisher) Publish(cfg S3Config) error {
 	f, err := os.Open(cfg.File)
 	if err != nil {
 		return fmt.Errorf("failed to open file %q, %v", cfg.File, err)

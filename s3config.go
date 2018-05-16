@@ -11,6 +11,7 @@ const (
 	awsDefaultRegion = "AWS_DEFAULT_REGION"
 )
 
+// S3Config describes s3 artifact
 type S3Config struct {
 	File      string `yaml: "file, omitempty"`
 	Bucket    string `yaml: "bucket, omitempty"`
@@ -19,6 +20,7 @@ type S3Config struct {
 	Region    string `yaml: region, omitempty`
 }
 
+// Validate checks if file path, bucket and region fields are not empty
 func (sc *S3Config) Validate() error {
 	if sc.File == "" {
 		return fmt.Errorf("s3 config without file is not allowed")
@@ -35,6 +37,7 @@ func (sc *S3Config) Validate() error {
 	return nil
 }
 
+// LoadCredentialsFromEnv loads access, private keys and region from Environment
 func (sc *S3Config) LoadCredentialsFromEnv() {
 	if sc.AccessKey == "" {
 		sc.AccessKey = os.Getenv(awsAccessKey)
