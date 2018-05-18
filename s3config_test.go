@@ -7,7 +7,7 @@ import (
 
 func TestS3ConfigValidate(t *testing.T) {
 	sc := &S3Config{
-		File:   "test",
+		Source: "test",
 		Bucket: "buc",
 		Region: "reg",
 	}
@@ -17,13 +17,13 @@ func TestS3ConfigValidate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sc.File = ""
+	sc.Source = ""
 	err = sc.Validate()
 	if err == nil {
 		t.Fatal("Expecting err not nil")
 	}
 
-	sc.File = "test"
+	sc.Source = "test"
 	sc.Bucket = ""
 	err = sc.Validate()
 	if err == nil {

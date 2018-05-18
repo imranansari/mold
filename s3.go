@@ -16,9 +16,9 @@ type S3Publisher struct{}
 
 // Publish publish provided artifact to s3
 func (*S3Publisher) Publish(cfg S3Config) error {
-	f, err := os.Open(cfg.File)
+	f, err := os.Open(cfg.Source)
 	if err != nil {
-		return fmt.Errorf("failed to open file %q, %v", cfg.File, err)
+		return fmt.Errorf("failed to open file %q, %v", cfg.Source, err)
 	}
 
 	cred := credentials.NewStaticCredentials(cfg.AccessKey, cfg.SecretKey, "")
@@ -36,7 +36,7 @@ func (*S3Publisher) Publish(cfg S3Config) error {
 
 	result, err := uploader.Upload(&s3manager.UploadInput{
 		Bucket: aws.String(cfg.Bucket),
-		Key:    aws.String(f.Name()),
+		Key:    aws.String(cfg.Target),
 		Body:   f,
 	})
 

@@ -13,7 +13,8 @@ const (
 
 // S3Config describes s3 artifact
 type S3Config struct {
-	File      string `yaml: "file, omitempty"`
+	Target    string `yaml: "target, omitempty"`
+	Source    string `yaml: "source, omitempty"`
 	Bucket    string `yaml: "bucket, omitempty"`
 	AccessKey string `yaml: ", omitempty"`
 	SecretKey string `yaml: ", omitempty"`
@@ -22,8 +23,12 @@ type S3Config struct {
 
 // Validate checks if file path, bucket and region fields are not empty
 func (sc *S3Config) Validate() error {
-	if sc.File == "" {
-		return fmt.Errorf("s3 config without file is not allowed")
+	if sc.Source == "" {
+		return fmt.Errorf("s3 config without source is not allowed")
+	}
+
+	if sc.Target == "" {
+		return fmt.Errorf("s3 config without target is not allowed")
 	}
 
 	if sc.Bucket == "" {

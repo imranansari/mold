@@ -1,6 +1,7 @@
 artifacts:
   s3:
-    - file: "testdata/test.txt"
+    - source: "testdata/test.txt"
+      target: "testtext.txt"
       bucket: "cali4888.test"
       accesskey: ""
       secretkey: ""
