@@ -7,6 +7,7 @@ import (
 
 func TestS3ConfigValidate(t *testing.T) {
 	sc := &S3Config{
+		Target: "test",
 		Source: "test",
 		Bucket: "buc",
 		Region: "reg",
