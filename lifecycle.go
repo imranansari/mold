@@ -28,6 +28,7 @@ type Worker interface {
 	Build() error                      // Build required data to be package
 	GenerateArtifacts(...string) error // Package data to an artifact.
 	Publish(...string) error           // Publish the generated artifacts
+
 	Teardown() error
 	Abort() error
 }
@@ -46,7 +47,6 @@ func NewLifeCycle(worker Worker) *LifeCycle {
 
 // Run the complete lifecyle
 func (lc *LifeCycle) Run(cfg *MoldConfig) error {
-
 	err := lc.worker.Configure(cfg)
 	if err != nil {
 		return err
@@ -57,6 +57,15 @@ func (lc *LifeCycle) Run(cfg *MoldConfig) error {
 	if err = lc.worker.Setup(); err == nil {
 		if err = lc.worker.Build(); err == nil {
 			if err = lc.worker.GenerateArtifacts(); err == nil {
+				if len(lc.cfg.Artifacts.S3) != 0 {
+					sPublisher := &S3Publisher{}
+					for _, c := range lc.cfg.Artifacts.S3 {
+						err := sPublisher.Publish(c)
+						if err != nil {
+							log.Printf("[ERROR] Can't publish to s3: %v", err)
+						}
+					}
+				}
 				if lc.shouldPublishArtifacts() {
 					err = lc.worker.Publish()
 				} else {
@@ -127,14 +136,15 @@ func (lc *LifeCycle) RunTarget(cfg *MoldConfig, target LifeCyclePhase, args ...s
 func (lc *LifeCycle) printStartSummary() {
 	c := lc.cfg
 	lc.log.Write([]byte(fmt.Sprintf(`
-Name       : %s
-Version    : %s
-Branch/Tag : %s
-Repo       : %s
+Name                : %s
+Version             : %s
+Branch/Tag          : %s
+Repo                : %s
 
-Services   : %d
-Builds     : %d
-Artifacts  : %d
+Services            : %d
+Builds              : %d
+Docker Artifacts    : %d
+S3 Artifacts        : %d
 
-`, c.Name(), c.gitVersion.Version(), c.BranchTag, c.RepoURL, len(c.Services), len(c.Build), len(c.Artifacts.Images))))
+`, c.Name(), c.gitVersion.Version(), c.BranchTag, c.RepoURL, len(c.Services), len(c.Build), len(c.Artifacts.Images), len(c.Artifacts.S3))))
 }

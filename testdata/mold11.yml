@@ -1,0 +1,8 @@
+artifacts:
+  s3:
+    - source: "testdata/test.txt"
+      target: "testtext.txt"
+      bucket: "cali4888.test"
+      accesskey: ""
+      secretkey: ""
+      region: "us-west-2"

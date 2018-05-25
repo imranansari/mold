@@ -84,6 +84,7 @@ func NewMoldConfig(fileBytes []byte) (*MoldConfig, error) {
 		}
 	}
 	mc.Artifacts.setDefaults()
+	mc.Artifacts.loadEnv()
 	mc.normalizeArtifactsPubs()
 	mc.normalizeArtifactsImageTags()
 
