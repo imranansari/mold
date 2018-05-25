@@ -18,6 +18,16 @@ type S3Publisher struct{}
 
 // Publish publish provided artifact to s3
 func (s *S3Publisher) Publish(cfg S3Config) error {
+	var cred *credentials.Credentials
+
+	if cfg.AccessKey != "" && cfg.SecretKey != "" {
+		cred = credentials.NewStaticCredentials(cfg.AccessKey, cfg.SecretKey, "")
+		_, err := cred.Get()
+		if err != nil {
+			return fmt.Errorf("failed to get creds %v", err)
+		}
+	}
+
 	isDir, err := isDirectory(cfg.Source)
 	if err != nil {
 		return err
@@ -27,7 +37,7 @@ func (s *S3Publisher) Publish(cfg S3Config) error {
 		err = filepath.Walk(cfg.Source, func(path string, f os.FileInfo, err error) error {
 			if !f.IsDir() {
 				log.Println(path)
-				err := s.publish(cfg, path, true)
+				err := s.publish(cfg, path, true, cred)
 				if err != nil {
 					return err
 				}
@@ -35,28 +45,22 @@ func (s *S3Publisher) Publish(cfg S3Config) error {
 			return nil
 		})
 	} else {
-		err = s.publish(cfg, cfg.Source, false)
+		err = s.publish(cfg, cfg.Source, false, cred)
 	}
 
 	return err
 }
 
-func (*S3Publisher) publish(cfg S3Config, filepath string, isDir bool) error {
+func (*S3Publisher) publish(cfg S3Config, filepath string, isDir bool, credentials *credentials.Credentials) error {
 	f, err := os.Open(filepath)
 	if err != nil {
 		return fmt.Errorf("failed to open file %q, %v", cfg.Source, err)
 	}
 	defer f.Close()
 
-	cred := credentials.NewStaticCredentials(cfg.AccessKey, cfg.SecretKey, "")
-	_, err = cred.Get()
-	if err != nil {
-		return fmt.Errorf("failed to get creds %v", err)
-	}
-
 	awsC := &aws.Config{
 		Region:      aws.String(cfg.Region),
-		Credentials: cred,
+		Credentials: credentials,
 	}
 	sess := session.Must(session.NewSession(awsC))
 	uploader := s3manager.NewUploader(sess)
