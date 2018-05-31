@@ -87,6 +87,7 @@ func NewMoldConfig(fileBytes []byte) (*MoldConfig, error) {
 	mc.Artifacts.loadEnv()
 	mc.normalizeArtifactsPubs()
 	mc.normalizeArtifactsImageTags()
+	mc.normalizeS3ArtifactsVars()
 
 	if err = mc.Artifacts.ValidateImageConfigs(); err != nil {
 		return nil, err
@@ -121,6 +122,16 @@ func (mc *MoldConfig) normalizeArtifactsImageTags() {
 		mc.Artifacts.Images[i].ReplaceTagVars("${APP_VERSION_SHORT}", mc.gitVersion.TagVersion())
 		mc.Artifacts.Images[i].ReplaceTagVars("${APP_COMMIT}", mc.gitVersion.Commit())
 		mc.Artifacts.Images[i].ReplaceTagVars("${APP_COMMIT_INDEX}", fmt.Sprintf("%d", mc.gitVersion.distance))
+	}
+}
+
+// Normalize s3 vars
+func (mc *MoldConfig) normalizeS3ArtifactsVars() {
+	for i := range mc.Artifacts.S3 {
+		mc.Artifacts.S3[i].ReplacePlaceholders("${APP_VERSION}", mc.gitVersion.Version())
+		mc.Artifacts.S3[i].ReplacePlaceholders("${APP_VERSION_SHORT}", mc.gitVersion.TagVersion())
+		mc.Artifacts.S3[i].ReplacePlaceholders("${APP_COMMIT}", mc.gitVersion.Commit())
+		mc.Artifacts.S3[i].ReplacePlaceholders("${APP_COMMIT_INDEX}", fmt.Sprintf("%d", mc.gitVersion.distance))
 	}
 }
 

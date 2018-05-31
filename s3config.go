@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 const (
@@ -40,6 +41,12 @@ func (sc *S3Config) Validate() error {
 	}
 
 	return nil
+}
+
+// ReplacePlaceholders replaces placeholders in Target and Source
+func (sc *S3Config) ReplacePlaceholders(placeholder, value string) {
+	sc.Target = strings.Replace(sc.Target, placeholder, value, -1)
+	sc.Source = strings.Replace(sc.Source, placeholder, value, -1)
 }
 
 // LoadCredentialsFromEnv loads access, private keys and region from Environment
