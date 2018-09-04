@@ -33,7 +33,7 @@ func Test_LifeCycle_buildless(t *testing.T) {
 	dw.RemoveArtifacts()
 }
 
-func Test_LifeCycle_fail(t *testing.T) {
+func Test_LifeCycle_fail_DueToBadExitCodeInCommands(t *testing.T) {
 	mc, _ := readMoldConfig("./testdata/mold.fail.yml")
 	mc.RepoName += "-test3"
 
@@ -84,8 +84,8 @@ func Test_LifeCycle_RunTarget(t *testing.T) {
 	}
 }
 
-func Test_LifeCycle_Resolution(t *testing.T) {
-	mc, worker, _ := initializeBuild("./testdata/mold7.yml", *dockerURI)
+func Test_LifeCycle_BuildContainerCanLocateServiceContainerOnNetwork(t *testing.T) {
+	mc, worker, _ := initializeBuild("./testdata/buildlocatesservice.yml", *dockerURI)
 	lc := NewLifeCycle(worker)
 	if err := lc.Run(mc); err != nil {
 		t.Fatal(err)
@@ -99,19 +99,19 @@ func Test_LifeCycle_multi_artifact(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-func Test_LifeCycle_dublicate_name(t *testing.T) {
-	mc, worker, _ := initializeBuild("./testdata/mold.dublicate.name.yml", *dockerURI)
+func Test_LifeCycle_duplicate_name(t *testing.T) {
+	mc, worker, _ := initializeBuild("./testdata/mold.duplicate.name.yml", *dockerURI)
 	lc := NewLifeCycle(worker)
 	if err := lc.Run(mc); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func Test_LifeCycle_dublicate_name_fail(t *testing.T) {
-	mc, worker, _ := initializeBuild("./testdata/mold.dublicate.name.fail.yml", *dockerURI)
+func Test_LifeCycle_duplicate_name_fail(t *testing.T) {
+	mc, worker, _ := initializeBuild("./testdata/mold.duplicate.name.fail.yml", *dockerURI)
 	lc := NewLifeCycle(worker)
 	if err := lc.Run(mc); err == nil {
-		t.Fatal("should fail with error \"dublicate name\"")
+		t.Fatal("should fail with error \"duplicate name\"")
 	}
 }
 

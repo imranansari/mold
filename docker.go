@@ -285,6 +285,10 @@ func (dkr *Docker) GetAuthBase64(authConfig types.AuthConfig) (string, error) {
 	return base64.URLEncoding.EncodeToString(auth), nil
 }
 
+func (dkr *Docker) GetImageList() ([]types.ImageSummary, error) {
+	return dkr.cli.ImageList(context.Background(), types.ImageListOptions{All: true})
+}
+
 // PushImage pushes a local docker image up to a registry
 func (dkr *Docker) PushImage(imageRef string, authCfg *types.AuthConfig, logWriter io.Writer, prefix string) error {
 	opts := types.ImagePushOptions{}

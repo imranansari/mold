@@ -116,7 +116,7 @@ func Test_Worker_GeneratesArtifacts_Abort(t *testing.T) {
 	}
 }
 
-func Test_ServiceWatcher(t *testing.T) {
+func Test_ServiceWatcher_GivenKilledContainer_LogsEvent(t *testing.T) {
 	testMc, worker, _ := initializeBuild("./testdata/mold10.yml", "")
 	worker.Configure(testMc)
 
@@ -152,7 +152,7 @@ func Test_ServiceWatcher(t *testing.T) {
 	}
 	log := string(bytes)
 
-	if !strings.Contains(log, "[service/mold.warn.test...] [WARN] service down before build end. Received signal:") {
+	if !strings.Contains(log, "service down before build end. Received signal:") {
 		t.Fatal("Service watcher didn't run")
 	}
 

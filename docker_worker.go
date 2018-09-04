@@ -17,6 +17,9 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
+	"io"
+	"github.com/docker/docker/client"
+	"strconv"
 )
 
 // default timeout when trying to stop a container.
@@ -33,7 +36,7 @@ type DockerWorker struct {
 	buildStates   containerStates // build containers
 	netID         string          // network id to connect all containers to
 
-	docker *Docker // docker helper client
+	docker Dockerer // docker helper client
 
 	done    chan bool // when all builds are completed
 	abort   chan bool // cancelled channel
@@ -46,9 +49,25 @@ type DockerWorker struct {
 	authCfg *DockerAuthConfig
 }
 
+type Dockerer interface {
+	BuildImageOfContainer(containerID string, reference string) error
+	BuildImageAsync(ic *ImageConfig, logWriter io.Writer, prefix string, done chan bool) error
+	Client() *client.Client
+	CreateNetwork(name string) (string, error)
+	GetImageList() ([]types.ImageSummary, error)
+	ImageAvailableLocally(imageName string) bool
+	RemoveContainer(containerID string, force bool) error
+	RemoveImage(imageID string, force bool, cleanUp bool) error
+	RemoveNetwork(networkID string) error
+	PushImage(imageRef string, authCfg *types.AuthConfig, logWriter io.Writer, prefix string) error
+	StartContainer(cc *ContainerConfig, wr *Log, prefix string) error
+	StopContainer(containerID string, timeout time.Duration) error
+	TailLogs(containerID string, wr io.Writer, prefix string) error
+}
+
 // NewDockerWorker instantiates a new worker. If no client is provided and env.
 // based client is used.
-func NewDockerWorker(dcli *Docker) (d *DockerWorker, err error) {
+func NewDockerWorker(dcli Dockerer) (d *DockerWorker, err error) {
 	d = &DockerWorker{
 		docker:             dcli,
 		log:                &Log{Writer: os.Stdout},
@@ -61,31 +80,73 @@ func NewDockerWorker(dcli *Docker) (d *DockerWorker, err error) {
 		err = nil
 	}
 
-	if d.docker == nil {
+	if dcli == nil {
 		d.docker, err = NewDocker("")
 	}
 	return
 }
 
-// Configure the job. This converts the MoldConfig to the docker required datastructure normalizing
-// values as needed.
 func (dw *DockerWorker) Configure(cfg *MoldConfig) error {
 	dw.mu.Lock()
 	defer dw.mu.Unlock()
 
 	dw.buildConfig = cfg
 
-	// Build service container contfigs
-	sc, err := assembleServiceContainers(cfg)
+	var err error
+	dw.serviceStates, err = buildServiceStates(cfg, dw.netID, func() string { return strconv.FormatInt(time.Now().UnixNano(), 10) })
 	if err != nil {
 		return err
 	}
 
-	dw.serviceStates = make([]*containerState, len(sc))
-
-	sNames, err := validateUserServiceNames(sc)
+	// Build build container configs
+	bc, err := assembleBuildContainers(cfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("Could not assemble build container: %v", err)
+	}
+	dw.buildStates = make([]*containerState, len(bc))
+	for i, s := range bc {
+		cs := &containerState{
+			ContainerConfig: s,
+			Type:            BuildContainerType,
+			save:            dw.buildConfig.Build[i].Save,
+		}
+		cs.Name = fmt.Sprintf("%s-%d-%d", dw.buildConfig.Name(), i, time.Now().UnixNano())
+		cs.shortName = shortContainerName(cs.Name)
+		cs.Network = &network.NetworkingConfig{
+			EndpointsConfig: map[string]*network.EndpointSettings{
+				dw.buildConfig.Name(): &network.EndpointSettings{
+					NetworkID: dw.netID,
+				},
+			},
+		}
+
+		if dw.buildConfig.Build[i].Cache {
+			hash, err := getBuildHash(cs.ContainerConfig)
+			if err != nil {
+				return err
+			}
+			cs.cache = &cache{
+				Name: fmt.Sprintf("cache-%s", dw.buildConfig.RepoName),
+				Tag:  hash,
+			}
+		}
+		dw.buildStates[i] = cs
+	}
+
+	return nil
+}
+
+func buildServiceStates(cfg *MoldConfig, networkID string, suffix func() string) ([]*containerState, error) {
+	sc, err := convertMoldServiceConfigToContainerConfig(cfg.Services)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*containerState, len(sc))
+
+	sNames, err := validateUniqueServiceNames(sc)
+	if err != nil {
+		return nil, err
 	}
 
 	var newName string
@@ -108,44 +169,24 @@ func (dw *DockerWorker) Configure(cfg *MoldConfig) error {
 		}
 
 		// Attach network
-		cs.Network = dw.defaultNetConfig()
-		dw.serviceStates[i] = cs
-	}
-
-	// Build build container configs
-	bc, err := assembleBuildContainers(cfg)
-	if err != nil {
-		return fmt.Errorf("Could not assemble build container: %v", err)
-	}
-	dw.buildStates = make([]*containerState, len(bc))
-	for i, s := range bc {
-		cs := &containerState{
-			ContainerConfig: s,
-			Type:            BuildContainerType,
-			save:            dw.buildConfig.Build[i].Save,
+		cs.Network = &network.NetworkingConfig{
+			EndpointsConfig: map[string]*network.EndpointSettings{
+				cfg.Name(): {
+					NetworkID: networkID,
+					Aliases:   []string{cs.Name},
+				},
+			},
 		}
-		cs.Name = fmt.Sprintf("%s-%d-%d", dw.buildConfig.Name(), i, time.Now().UnixNano())
-		cs.shortName = shortContainerName(cs.Name)
-		cs.Network = dw.defaultNetConfig()
 
-		if dw.buildConfig.Build[i].Cache {
-			hash, err := getBuildHash(cs.ContainerConfig)
-			if err != nil {
-				return err
-			}
-			cs.cache = &cache{
-				Name: fmt.Sprintf("cache-%s", dw.buildConfig.RepoName),
-				Tag:  hash,
-			}
-		}
-		dw.buildStates[i] = cs
+		cs.Name = cs.Name + "-" + suffix()
+		result[i] = cs
 	}
 
-	return nil
+	return result, nil
 }
 
 // validation values that the user has set explicitly
-func validateUserServiceNames(sc []*ContainerConfig) (map[string]bool, error) {
+func validateUniqueServiceNames(sc []*ContainerConfig) (map[string]bool, error) {
 	var serviceNames = make(map[string]bool)
 	for _, s := range sc {
 		if s.Name == "" {
@@ -159,9 +200,9 @@ func validateUserServiceNames(sc []*ContainerConfig) (map[string]bool, error) {
 	return serviceNames, nil
 }
 
-func assembleServiceContainers(mc *MoldConfig) ([]*ContainerConfig, error) {
-	bcs := make([]*ContainerConfig, len(mc.Services))
-	for i, b := range mc.Services {
+func convertMoldServiceConfigToContainerConfig(rc []DockerRunConfig) ([]*ContainerConfig, error) {
+	bcs := make([]*ContainerConfig, len(rc))
+	for i, b := range rc {
 		cc := DefaultContainerConfig(b.Image)
 		cc.Container.Cmd = b.Commands
 		cc.Host.Binds = b.Volumes
@@ -217,16 +258,6 @@ func assembleBuildContainers(mc *MoldConfig) ([]*ContainerConfig, error) {
 		}
 	}
 	return bconts, nil
-}
-
-func (dw *DockerWorker) defaultNetConfig() *network.NetworkingConfig {
-	return &network.NetworkingConfig{
-		EndpointsConfig: map[string]*network.EndpointSettings{
-			dw.buildConfig.Name(): &network.EndpointSettings{
-				NetworkID: dw.netID,
-			},
-		},
-	}
 }
 
 // GenerateArtifacts builds docker images
@@ -432,7 +463,7 @@ func (dw *DockerWorker) Setup() error {
 		return err
 		// network exists - so move on.
 	}
-	dw.log.Write([]byte(fmt.Sprintf("[configure/network/%s] Created %s\n", dw.buildConfig.Name(), dw.netID)))
+	dw.log.Write([]byte(fmt.Sprintf("[setup/network/%s] Created %s\n", dw.buildConfig.Name(), dw.netID)))
 
 	go dw.watchServices()
 
@@ -494,20 +525,10 @@ func (dw *DockerWorker) cacheImage(cs containerState) error {
 // Teardown stops and removes all services spun up before the build as part of cleanup
 func (dw *DockerWorker) Teardown() error {
 	var err error
-	// remove service containers
-	for _, cs := range dw.serviceStates {
-		e := dw.docker.RemoveContainer(cs.ID(), true)
-		err = mergeErrors(err, e)
-	}
-	// remove build containers.
-	for _, cs := range dw.buildStates {
-		if !cs.save {
-			e := dw.docker.RemoveContainer(cs.ID(), true)
-			err = mergeErrors(err, e)
-		}
-	}
+	err = removeContainers(dw.serviceStates, dw.docker, err)
+	err = removeContainers(dw.buildStates, dw.docker, err)
 
-	// remove build image if 'cleanup' flag was setted
+	// remove build image if 'cleanup' flag was set
 	for _, bImage := range dw.buildConfig.Build {
 		if bImage.CleanUp == true {
 			id, err := dw.getImageID(bImage.Image)
@@ -536,13 +557,21 @@ func (dw *DockerWorker) Teardown() error {
 	return err
 }
 
+func removeContainers(states containerStates, docker Dockerer, err error) error {
+	for _, cs := range states {
+		e := docker.RemoveContainer(cs.ID(), true)
+		err = mergeErrors(err, e)
+	}
+	return err
+}
+
 // getImageID returns image  ID by repository name
 func (dw *DockerWorker) getImageID(repoName string) (string, error) {
 	// adding default tag "latest" if there are no tags
 	if len(strings.Split(repoName, ":")) == 1 {
 		repoName += ":latest"
 	}
-	imagesInfo, err := dw.docker.cli.ImageList(context.Background(), types.ImageListOptions{All: true})
+	imagesInfo, err := dw.docker.GetImageList()
 	if err != nil {
 		return "", err
 	}
@@ -557,8 +586,8 @@ func (dw *DockerWorker) getImageID(repoName string) (string, error) {
 }
 
 // TODO: add locking???
-// markContainerDone marks the container as done.  Return if all the build containers have completed
-func (dw *DockerWorker) markContainerDone(id, status string, state *types.ContainerState) bool {
+// markContainerDoneAndUpdateBuildState marks the container as done.  Return if all the build containers have completed
+func (dw *DockerWorker) markContainerDoneAndUpdateBuildState(id, status string, state *types.ContainerState) bool {
 	for i, v := range dw.buildStates {
 		if v.ID() == id {
 			dw.mu.Lock()
@@ -599,7 +628,7 @@ func (dw *DockerWorker) watchBuild() {
 				if c := dw.buildStates.Get(msg.Actor.ID); c != nil {
 					// Breakout if the whole build is done.  This does not update the status
 					// and is there more so the build doesn't block forever in case of failures
-					if dw.markContainerDone(msg.Actor.ID, "", nil) {
+					if dw.markContainerDoneAndUpdateBuildState(msg.Actor.ID, "", nil) {
 						return
 					}
 				}
@@ -622,7 +651,7 @@ func (dw *DockerWorker) watchBuild() {
 						status = msg.Action
 					}
 					// breakout if the whole build is done
-					if dw.markContainerDone(msg.Actor.ID, status, &state) {
+					if dw.markContainerDoneAndUpdateBuildState(msg.Actor.ID, status, &state) {
 						return
 					}
 				}

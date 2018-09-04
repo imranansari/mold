@@ -38,7 +38,7 @@ func Test_Docker_StartContainer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cc := DefaultContainerConfig("test")
+	cc := DefaultContainerConfig("testsdkxjkchvsldkjf")
 	err = d.StartContainer(cc, nil, "prefix")
 	if err == nil {
 		t.Fatal("should be pull error")
