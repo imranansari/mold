@@ -5,7 +5,7 @@ context: "C:\\foo\\bar"
 
 # Launch services needed for build
 services:
-    - image: elasticsearch
+    - image: elasticsearch:5.6.12
     - image: progrium/consul
       # Args pass to the container
       commands:

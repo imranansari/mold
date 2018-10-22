@@ -93,11 +93,30 @@ func (gt *gitVersion) getTags() error {
 			case *object.Tag:
 				tag := obj.(*object.Tag)
 				if c, e := tag.Commit(); e == nil {
-					gt.tags[c.Hash] = arg1
+					if oldTagRef, ok := gt.tags[c.Hash]; ok {
+						oldObj, err := gt.r.Object(plumbing.AnyObject, oldTagRef.Hash())
+						if err != nil {
+							return nil
+						}
+
+						switch oldObj.(type) {
+						case *object.Tag:
+							oldTag := oldObj.(*object.Tag)
+							if tag.Tagger.When.After(oldTag.Tagger.When) {
+								gt.tags[c.Hash] = arg1
+							}
+						case *object.Commit:
+							gt.tags[c.Hash] = arg1
+						}
+					} else {
+						gt.tags[c.Hash] = arg1
+					}
 				}
 
 			case *object.Commit:
-				gt.tags[obj.ID()] = arg1
+				if _, ok := gt.tags[obj.ID()]; !ok {
+					gt.tags[obj.ID()] = arg1
+				}
 			}
 		}
 
